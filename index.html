@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic List and Random Choice</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container py-4">
+<div id="notification" class="alert alert-info text-center d-none fixed-top w-100"></div>
+
+<h2 class="text-center mb-3">Dynamic List</h2>
+
+<div class="input-group mb-3">
+    <input type="text" id="listName" class="form-control" placeholder="List name">
+    <button class="btn btn-success" onclick="saveList()">Save</button>
+    <select id="savedLists" class="form-select"></select>
+    <button class="btn btn-info" onclick="loadSelectedList()">Load</button>
+    <button class="btn btn-danger" onclick="deleteSelectedList()">Delete</button>
+</div>
+
+<div class="input-group mb-3">
+    <input type="text" id="itemInput" class="form-control" placeholder="Add an item">
+    <button class="btn btn-primary" onclick="addItem()">Add</button>
+</div>
+
+<ul id="itemList" class="list-group mb-3"></ul>
+
+<h3 id="result" class="text-center text-success"></h3>
+<div class="text-center d-flex justify-content-center align-items-center gap-2">
+    <button class="btn btn-warning" onclick="rollItem()">Roll</button>
+    <input type="number" id="resultCount" class="form-control" style="width: 60px;" value="1" min="1">
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="uniqueResults">
+        <label class="form-check-label" for="uniqueResults">Unique results</label>
+    </div>
+</div>
+
+<script>
+    const listElement = document.getElementById("itemList");
+    const inputElement = document.getElementById("itemInput");
+    const resultElement = document.getElementById("result");
+    const listNameElement = document.getElementById("listName");
+    const savedListsElement = document.getElementById("savedLists");
+    const notificationElement = document.getElementById("notification");
+    const resultCountElement = document.getElementById("resultCount");
+    const uniqueResultsElement = document.getElementById("uniqueResults");
+    let items = JSON.parse(localStorage.getItem("items")) || [];
+    let firstRoll = true;
+
+    function renderList() {
+        listElement.innerHTML = "";
+        items.forEach((item, index) => {
+            const li = document.createElement("li");
+            li.className = "list-group-item d-flex justify-content-between align-items-center";
+            li.textContent = item;
+            const removeBtn = document.createElement("button");
+            removeBtn.className = "btn btn-danger btn-sm";
+            removeBtn.textContent = "×";
+            removeBtn.onclick = () => removeItem(index);
+            li.appendChild(removeBtn);
+            listElement.appendChild(li);
+        });
+        localStorage.setItem("items", JSON.stringify(items));
+    }
+
+    function addItem() {
+        const value = inputElement.value.trim();
+        if (value) {
+            items.push(value);
+            inputElement.value = "";
+            renderList();
+        }
+    }
+
+    function removeItem(index) {
+        items.splice(index, 1);
+        renderList();
+    }
+
+    function deleteSelectedList() {
+        const selectedList = savedListsElement.value;
+        if (selectedList && confirm(`Are you sure you want to delete "${selectedList}"?`)) {
+            localStorage.removeItem(`savedList_${selectedList}`);
+            items = [];
+            renderList();
+            updateSavedLists();
+            showNotification(`List "${selectedList}" deleted!`);
+        }
+    }
+
+    function rollItem() {
+        let count = parseInt(resultCountElement.value, 10);
+        let unique = uniqueResultsElement.checked;
+
+        if (unique && count > items.length) {
+            showNotification("Not enough unique items to roll!");
+            return;
+        }
+
+        if (items.length > 0) {
+            resultElement.textContent = "Result: ...";
+            setTimeout(() => {
+                let selectedItems = [];
+                let availableItems = [...items];
+
+                for (let i = 0; i < count; i++) {
+                    if (unique) {
+                        const index = Math.floor(Math.random() * availableItems.length);
+                        selectedItems.push(availableItems.splice(index, 1)[0]);
+                    } else {
+                        selectedItems.push(items[Math.floor(Math.random() * items.length)]);
+                    }
+                }
+                resultElement.textContent = `Result: ${selectedItems.join(", ")}`;
+            }, 200);
+        } else {
+            resultElement.textContent = "List is empty!";
+        }
+    }
+
+    function showNotification(message) {
+        notificationElement.textContent = message;
+        notificationElement.classList.remove("d-none");
+        setTimeout(() => {
+            notificationElement.classList.add("d-none");
+        }, 2000);
+    }
+
+    function saveList() {
+        const listName = listNameElement.value.trim();
+        if (listName) {
+            localStorage.setItem(`savedList_${listName}`, JSON.stringify(items));
+            updateSavedLists();
+            showNotification(`List "${listName}" saved!`);
+        }
+    }
+
+    function loadSelectedList() {
+        const selectedList = savedListsElement.value;
+        if (selectedList) {
+            listNameElement.value = selectedList;
+            const savedItems = JSON.parse(localStorage.getItem(`savedList_${selectedList}`));
+            if (savedItems) {
+                items = savedItems;
+                renderList();
+                showNotification(`List "${selectedList}" loaded!`);
+            } else {
+                showNotification("List not found!");
+            }
+        }
+    }
+
+    function updateSavedLists() {
+        savedListsElement.innerHTML = "";
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith("savedList_")) {
+                const option = document.createElement("option");
+                option.value = key.replace("savedList_", "");
+                option.textContent = key.replace("savedList_", "");
+                savedListsElement.appendChild(option);
+            }
+        });
+    }
+
+    updateSavedLists();
+    renderList();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
