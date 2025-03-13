@@ -12,24 +12,27 @@
 <h2 class="text-center mb-3">Dynamic List</h2>
 
 <div class="input-group mb-3">
-    <input type="text" id="listName" class="form-control" placeholder="List name">
+    <label for="listName"></label><input type="text" id="listName" class="form-control" placeholder="List name">
     <button class="btn btn-success" onclick="saveList()">Save</button>
-    <select id="savedLists" class="form-select"></select>
+    <label for="savedLists"></label><select id="savedLists" class="form-select"></select>
     <button class="btn btn-info" onclick="loadSelectedList()">Load</button>
     <button class="btn btn-danger" onclick="deleteSelectedList()">Delete</button>
 </div>
 
 <div class="input-group mb-3">
-    <input type="text" id="itemInput" class="form-control" placeholder="Add an item">
+    <label for="itemInput"></label><input type="text" id="itemInput" class="form-control" placeholder="Add an item">
     <button class="btn btn-primary" onclick="addItem()">Add</button>
 </div>
 
 <ul id="itemList" class="list-group mb-3"></ul>
+<button class="btn btn-secondary mb-3" onclick="newList()">New List</button>
+
 
 <h3 id="result" class="text-center text-success"></h3>
 <div class="text-center d-flex justify-content-center align-items-center gap-2">
     <button class="btn btn-warning" onclick="rollItem()">Roll</button>
-    <input type="number" id="resultCount" class="form-control" style="width: 60px;" value="1" min="1">
+    <label for="resultCount"></label><input type="number" id="resultCount" class="form-control" style="width: 60px;"
+                                            value="1" min="1">
     <div class="form-check">
         <input class="form-check-input" type="checkbox" id="uniqueResults">
         <label class="form-check-label" for="uniqueResults">Unique results</label>
@@ -46,14 +49,55 @@
     const resultCountElement = document.getElementById("resultCount");
     const uniqueResultsElement = document.getElementById("uniqueResults");
     let items = JSON.parse(localStorage.getItem("items")) || [];
-    let firstRoll = true;
+    let currentListName = localStorage.getItem("currentListName") || "";
+    let isListModified = false;
+
+    window.onbeforeunload = function (event) {
+        if (isListModified && currentListName !== '') {
+            event.preventDefault();
+            return (event.returnValue = "You have unsaved changes. Are you sure you want to leave?");
+        }
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+        updateSavedLists();
+
+        currentListName = localStorage.getItem("currentListName") || "";
+        if (currentListName && localStorage.getItem(`savedList_${currentListName}`)) {
+            listNameElement.value = currentListName;
+            savedListsElement.value = currentListName;
+
+            const savedItems = JSON.parse(localStorage.getItem(`savedList_${currentListName}`));
+            if (savedItems) {
+                items = savedItems;
+                localStorage.setItem("items", JSON.stringify(items));
+                renderList();
+            }
+        } else {
+            currentListName = "";
+            listNameElement.value = "";
+            savedListsElement.selectedIndex = 0;
+        }
+    });
+
+    inputElement.addEventListener("keypress", (event) => {
+        if (event.key === "Enter") {
+            addItem();
+        }
+    });
+
+    listNameElement.addEventListener("keypress", (event) => {
+        if (event.key === "Enter") {
+            saveList();
+        }
+    });
 
     function renderList() {
         listElement.innerHTML = "";
         items.forEach((item, index) => {
             const li = document.createElement("li");
             li.className = "list-group-item d-flex justify-content-between align-items-center";
-            li.textContent = item;
+            li.textContent = String(item);
             const removeBtn = document.createElement("button");
             removeBtn.className = "btn btn-danger btn-sm";
             removeBtn.textContent = "×";
@@ -61,31 +105,62 @@
             li.appendChild(removeBtn);
             listElement.appendChild(li);
         });
-        localStorage.setItem("items", JSON.stringify(items));
     }
 
     function addItem() {
         const value = inputElement.value.trim();
-        if (value) {
-            items.push(value);
-            inputElement.value = "";
-            renderList();
+        if (!value) return;
+        if (items.includes(value)) {
+            showNotification("Item already in the list!", 'warning');
+            return;
         }
+        items.push(value);
+        inputElement.value = "";
+        localStorage.setItem("items", JSON.stringify(items));
+        isListModified = true;
+        renderList();
     }
 
     function removeItem(index) {
         items.splice(index, 1);
+        localStorage.setItem("items", JSON.stringify(items));
+        isListModified = true;
         renderList();
     }
 
     function deleteSelectedList() {
         const selectedList = savedListsElement.value;
-        if (selectedList && confirm(`Are you sure you want to delete "${selectedList}"?`)) {
+        if (!selectedList) return;
+
+        if (confirm(`Are you sure you want to delete "${selectedList}"?`)) {
             localStorage.removeItem(`savedList_${selectedList}`);
+
+            if (currentListName === selectedList) {
+                currentListName = "";
+                localStorage.removeItem("currentListName");
+            }
+
+            listNameElement.value = "";
             items = [];
             renderList();
             updateSavedLists();
-            showNotification(`List "${selectedList}" deleted!`);
+            showNotification(`List "${selectedList}" deleted!`, 'success');
+        }
+    }
+
+    function newList() {
+        if (confirm("Are you sure you want to clear all and create a new list?")) {
+            items = [];
+            currentListName = "";
+            localStorage.removeItem("currentListName");
+            localStorage.removeItem("items");
+
+            listNameElement.value = "";
+            updateSavedLists();
+            isListModified = false;
+            renderList();
+
+            showNotification("New list created! Don't forget to save it.", 'info');
         }
     }
 
@@ -93,34 +168,39 @@
         let count = parseInt(resultCountElement.value, 10);
         let unique = uniqueResultsElement.checked;
 
-        if (unique && count > items.length) {
-            showNotification("Not enough unique items to roll!");
+        if (items.length === 0) {
+            showNotification("The list is empty! Add some items first.", 'danger');
+            resultElement.textContent = "";
             return;
         }
 
-        if (items.length > 0) {
-            resultElement.textContent = "Result: ...";
-            setTimeout(() => {
-                let selectedItems = [];
-                let availableItems = [...items];
-
-                for (let i = 0; i < count; i++) {
-                    if (unique) {
-                        const index = Math.floor(Math.random() * availableItems.length);
-                        selectedItems.push(availableItems.splice(index, 1)[0]);
-                    } else {
-                        selectedItems.push(items[Math.floor(Math.random() * items.length)]);
-                    }
-                }
-                resultElement.textContent = `Result: ${selectedItems.join(", ")}`;
-            }, 200);
-        } else {
-            resultElement.textContent = "List is empty!";
+        if (unique && count > items.length) {
+            showNotification("Not enough unique items to roll!", 'warning');
+            return;
         }
+
+        resultElement.textContent = "Rolling...";
+        setTimeout(() => {
+            let selectedItems = unique
+                ? shuffleArray([...items]).slice(0, count)
+                : Array.from({length: count}, () => items[Math.floor(Math.random() * items.length)]);
+
+            resultElement.textContent = `Result: ${selectedItems.join(", ")}`;
+        }, 200);
     }
 
-    function showNotification(message) {
+    function shuffleArray(array) {
+        let shuffled = array.slice();
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            let j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    }
+
+    function showNotification(message, type = "info") {
         notificationElement.textContent = message;
+        notificationElement.className = `alert alert-${type} text-center fixed-top w-100`;
         notificationElement.classList.remove("d-none");
         setTimeout(() => {
             notificationElement.classList.add("d-none");
@@ -129,38 +209,74 @@
 
     function saveList() {
         const listName = listNameElement.value.trim();
-        if (listName) {
-            localStorage.setItem(`savedList_${listName}`, JSON.stringify(items));
-            updateSavedLists();
-            showNotification(`List "${listName}" saved!`);
+        if (!listName) {
+            showNotification("Please enter a list name!", 'warning');
+            return;
         }
+
+        if (localStorage.getItem(`savedList_${listName}`) && !confirm(`Overwrite the existing list "${listName}"?`)) {
+            return;
+        }
+
+        localStorage.setItem(`savedList_${listName}`, JSON.stringify(items));
+        localStorage.setItem("currentListName", listName);
+        currentListName = listName;
+        isListModified = false;
+
+        updateSavedLists();
+        savedListsElement.value = listName;
+
+        showNotification(`List "${listName}" saved!`, 'success');
     }
 
     function loadSelectedList() {
         const selectedList = savedListsElement.value;
-        if (selectedList) {
-            listNameElement.value = selectedList;
-            const savedItems = JSON.parse(localStorage.getItem(`savedList_${selectedList}`));
-            if (savedItems) {
-                items = savedItems;
-                renderList();
-                showNotification(`List "${selectedList}" loaded!`);
-            } else {
-                showNotification("List not found!");
-            }
+        if (!selectedList || !localStorage.getItem(`savedList_${selectedList}`)) {
+            showNotification("List not found!", 'warning');
+            return;
+        }
+
+        currentListName = selectedList;
+        listNameElement.value = selectedList;
+        localStorage.setItem("currentListName", selectedList);
+
+        const savedItems = JSON.parse(localStorage.getItem(`savedList_${selectedList}`));
+        if (savedItems) {
+            items = savedItems;
+            localStorage.setItem("items", JSON.stringify(items));
+            renderList();
+            showNotification(`List "${selectedList}" loaded!`, 'success');
         }
     }
 
     function updateSavedLists() {
         savedListsElement.innerHTML = "";
+
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "Select a list...";
+        defaultOption.disabled = true;
+
+        savedListsElement.appendChild(defaultOption);
+
+        let hasLists = false;
+
         Object.keys(localStorage).forEach(key => {
             if (key.startsWith("savedList_")) {
                 const option = document.createElement("option");
                 option.value = key.replace("savedList_", "");
                 option.textContent = key.replace("savedList_", "");
                 savedListsElement.appendChild(option);
+                hasLists = true;
             }
         });
+
+        if (hasLists && currentListName && localStorage.getItem(`savedList_${currentListName}`)) {
+            savedListsElement.value = currentListName;
+        } else {
+            currentListName = "";
+            savedListsElement.selectedIndex = 0;
+        }
     }
 
     updateSavedLists();
